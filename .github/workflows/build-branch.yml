@@ -163,6 +163,22 @@ jobs:
           echo "Deployment repo updated successfully!"
           echo "======================================"
 
+      - name: Trigger ArgoCD Sync via Webhook
+        if: success()
+        run: |
+          echo "======================================"
+          echo "Triggering ArgoCD refresh for actions-dev"
+          echo "======================================"
+
+          # Trigger ArgoCD refresh webhook (this forces ArgoCD to check for changes immediately)
+          curl -X POST "${{ secrets.ARGOCD_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{"ref": "refs/heads/main", "repository": {"full_name": "ShinobiSlayer/actions-deployment"}}' || echo "Webhook trigger failed, ArgoCD will auto-sync within 3 minutes"
+
+          echo "======================================"
+          echo "ArgoCD refresh triggered! Sync will happen automatically."
+          echo "======================================"
+
       - name: Summary
         if: success()
         run: |
