@@ -10,6 +10,6 @@ public class TestRestController {
 
     @GetMapping("/test")
     public Map<String, String> get() {
-        return Map.of("message", "Hello World5!");
+        return Map.of("message", "Hello World6!");
     }
 }
