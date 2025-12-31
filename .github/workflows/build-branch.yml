@@ -68,3 +68,18 @@ jobs:
           echo "Docker image: shinobislayer/actions:$VERSION"
           echo "Docker image: shinobislayer/actions:latest"
           echo "======================================"
+
+      - name: Trigger ArgoCD Sync
+        if: success()
+        run: |
+          echo "Triggering ArgoCD sync via webhook..."
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            "${{ secrets.ARGOCD_WEBHOOK_URL }}" \
+            -d '{
+              "ref": "refs/heads/${{ github.ref_name }}",
+              "repository": {
+                "full_name": "${{ github.repository }}"
+              }
+            }'
+          echo "ArgoCD sync triggered successfully!"
