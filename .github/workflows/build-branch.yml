@@ -143,7 +143,7 @@ jobs:
           echo "======================================"
 
           # Clone deployment repo
-          git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ShinobiSlayer/actions-deployment.git /tmp/deployment
+          git clone https://x-access-token:${{ secrets.DEPLOYMENT_REPO_TOKEN }}@github.com/ShinobiSlayer/actions-deployment.git /tmp/deployment
 
           cd /tmp/deployment
 
