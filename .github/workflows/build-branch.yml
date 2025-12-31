@@ -142,14 +142,19 @@ jobs:
           echo "Triggering ArgoCD webhook for immediate sync..."
           echo "======================================"
 
+          # Send GitHub-compatible push event to ArgoCD webhook
           curl -X POST \
             -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: push" \
             "${{ secrets.ARGOCD_WEBHOOK_URL }}" \
             -d '{
               "ref": "refs/heads/${{ github.ref_name }}",
               "repository": {
-                "full_name": "${{ github.repository }}"
-              }
+                "full_name": "${{ github.repository }}",
+                "clone_url": "https://github.com/${{ github.repository }}.git",
+                "html_url": "https://github.com/${{ github.repository }}"
+              },
+              "after": "${{ github.sha }}"
             }' || echo "Webhook call failed (continuing anyway)"
 
           echo "Webhook triggered!"
