@@ -16,6 +16,8 @@ spec:
         app: actions
         version: v1
     spec:
+      imagePullSecrets:
+      - name: dockerhub-secret
       containers:
       - name: actions
         image: shinobislayer/actions:latest
