@@ -45,49 +45,125 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
 
-      - name: Make Gradlew Executable
-        run: chmod +x ./gradlew
-
-      - name: Build and Push Docker Image
+      - name: Calculate Version
+        id: version
         env:
           BRANCH_NAME: ${{ github.ref_name }}
         run: |
           set -e
-          echo "======================================"
-          echo "Building branch: $BRANCH_NAME"
-          echo "======================================"
 
-          # Determine branch version suffix
+          # Get current year and month
+          YEAR=$(date +%Y)
+          MONTH=$(date +%m)
+
+          # Get first day of current month for git log filtering
+          MONTH_START="${YEAR}-${MONTH}-01"
+
+          # Count commits in current month on this branch
+          # Fetch full history first
+          git fetch --unshallow 2>/dev/null || git fetch --depth=1000
+
+          # Count commits this month
+          BUILD_NUM=$(git log --since="${MONTH_START}" --oneline --no-merges | wc -l | tr -d ' ')
+
+          # Ensure it's at least 001
+          if [ "$BUILD_NUM" -eq 0 ]; then
+            BUILD_NUM=1
+          fi
+
+          # Format as 3 digits
+          BUILD_NUM=$(printf "%03d" $BUILD_NUM)
+
+          # Determine branch suffix
           BRANCH_UPPER=$(echo "$BRANCH_NAME" | tr '[:lower:]' '[:upper:]')
 
-          # Print version
-          VERSION=$(./gradlew -PbranchVersion=$BRANCH_UPPER -q printVersion)
-          echo "Version: $VERSION"
+          # Construct version: YYYY.MM.NNN-BRANCH
+          VERSION="${YEAR}.${MONTH}.${BUILD_NUM}-${BRANCH_UPPER}"
 
-          # Build and push Docker image
-          ./gradlew -PbranchVersion=$BRANCH_UPPER clean build docker
+          echo "======================================"
+          echo "Calculated Version: $VERSION"
+          echo "Year: $YEAR, Month: $MONTH, Build: $BUILD_NUM"
+          echo "======================================"
+
+          # Export for later steps
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "YEAR=$YEAR" >> $GITHUB_OUTPUT
+          echo "MONTH=$MONTH" >> $GITHUB_OUTPUT
+          echo "BUILD_NUM=$BUILD_NUM" >> $GITHUB_OUTPUT
+          echo "BRANCH_UPPER=$BRANCH_UPPER" >> $GITHUB_OUTPUT
+
+      - name: Update Build Configuration
+        run: |
+          # Update build.gradle.kts with the calculated version
+          sed -i 's/val codeVersion = ".*"/val codeVersion = "${{ steps.version.outputs.YEAR }}.${{ steps.version.outputs.MONTH }}.${{ steps.version.outputs.BUILD_NUM }}"/' build.gradle.kts
+
+          echo "Updated build.gradle.kts with version: ${{ steps.version.outputs.VERSION }}"
+
+      - name: Make Gradlew Executable
+        run: chmod +x ./gradlew
+
+      - name: Build and Push Docker Image
+        run: |
+          set -e
+          echo "======================================"
+          echo "Building version: ${{ steps.version.outputs.VERSION }}"
+          echo "======================================"
+
+          # Build and push Docker image with versioned tag
+          ./gradlew -PbranchVersion=${{ steps.version.outputs.BRANCH_UPPER }} clean build docker
 
           echo "======================================"
           echo "Build complete!"
-          echo "Docker image: shinobislayer/actions:$VERSION"
+          echo "Docker image: shinobislayer/actions:${{ steps.version.outputs.VERSION }}"
           echo "Docker image: shinobislayer/actions:latest"
           echo "======================================"
 
-      - name: Update Deployment and Trigger Sync
+      - name: Create Git Tag
         if: success()
         run: |
-          # Update deployment with build timestamp to force rollout
-          TIMESTAMP=$(date +%s)
-          sed -i "s/deployedAt:.*/deployedAt: \"$TIMESTAMP\"/" k8s/deployment.yaml || \
-          sed -i "/labels:/a \ \ \ \ \ \ \ \ deployedAt: \"$TIMESTAMP\"" k8s/deployment.yaml
-
           # Configure git
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Commit and push the updated deployment
-          git add k8s/deployment.yaml
-          git commit -m "Update deployment timestamp [skip ci]" || echo "No changes to commit"
-          git push || echo "Nothing to push"
+          # Create annotated tag
+          git tag -a "v${{ steps.version.outputs.VERSION }}" -m "Release ${{ steps.version.outputs.VERSION }}"
 
-          echo "Deployment updated and pushed to trigger ArgoCD sync"
+          # Push tag
+          git push origin "v${{ steps.version.outputs.VERSION }}"
+
+          echo "======================================"
+          echo "Created and pushed tag: v${{ steps.version.outputs.VERSION }}"
+          echo "======================================"
+
+      - name: Trigger ArgoCD Webhook
+        if: success()
+        run: |
+          echo "======================================"
+          echo "Triggering ArgoCD webhook for immediate sync..."
+          echo "======================================"
+
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            "${{ secrets.ARGOCD_WEBHOOK_URL }}" \
+            -d '{
+              "ref": "refs/heads/${{ github.ref_name }}",
+              "repository": {
+                "full_name": "${{ github.repository }}"
+              }
+            }' || echo "Webhook call failed (continuing anyway)"
+
+          echo "Webhook triggered!"
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "======================================"
+          echo "✅ Build Complete!"
+          echo "======================================"
+          echo "Version: ${{ steps.version.outputs.VERSION }}"
+          echo "Git Tag: v${{ steps.version.outputs.VERSION }}"
+          echo "Docker Image: shinobislayer/actions:${{ steps.version.outputs.VERSION }}"
+          echo ""
+          echo "ArgoCD webhook triggered for immediate refresh."
+          echo "Image Updater will detect new image and update deployment."
+          echo "======================================"
