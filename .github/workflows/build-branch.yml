@@ -69,17 +69,21 @@ jobs:
           echo "Docker image: shinobislayer/actions:latest"
           echo "======================================"
 
-      - name: Trigger ArgoCD Sync
+      - name: Update Deployment and Trigger Sync
         if: success()
         run: |
-          echo "Triggering ArgoCD sync via webhook..."
-          curl -X POST \
-            -H "Content-Type: application/json" \
-            "${{ secrets.ARGOCD_WEBHOOK_URL }}" \
-            -d '{
-              "ref": "refs/heads/${{ github.ref_name }}",
-              "repository": {
-                "full_name": "${{ github.repository }}"
-              }
-            }'
-          echo "ArgoCD sync triggered successfully!"
+          # Update deployment with build timestamp to force rollout
+          TIMESTAMP=$(date +%s)
+          sed -i "s/deployedAt:.*/deployedAt: \"$TIMESTAMP\"/" k8s/deployment.yaml || \
+          sed -i "/labels:/a \ \ \ \ \ \ \ \ deployedAt: \"$TIMESTAMP\"" k8s/deployment.yaml
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Commit and push the updated deployment
+          git add k8s/deployment.yaml
+          git commit -m "Update deployment timestamp [skip ci]" || echo "No changes to commit"
+          git push || echo "Nothing to push"
+
+          echo "Deployment updated and pushed to trigger ArgoCD sync"

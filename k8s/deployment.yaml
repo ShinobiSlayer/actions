@@ -15,6 +15,7 @@ spec:
       labels:
         app: actions
         version: v1
+        deployedAt: "0"
     spec:
       imagePullSecrets:
       - name: dockerhub-secret
