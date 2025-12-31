@@ -3,6 +3,12 @@ kind: Application
 metadata:
   name: actions-app
   namespace: argocd
+  annotations:
+    argocd-image-updater.argoproj.io/image-list: actions=shinobislayer/actions
+    argocd-image-updater.argoproj.io/actions.update-strategy: latest
+    argocd-image-updater.argoproj.io/actions.allow-tags: regexp:^2025\.\d+\.\d+-.*$
+    argocd-image-updater.argoproj.io/actions.pull-secret: secret:argocd/dockerhub-secret
+    argocd-image-updater.argoproj.io/write-back-method: argocd
 spec:
   project: default
   source:
