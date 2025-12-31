@@ -135,40 +135,47 @@ jobs:
           echo "Created and pushed tag: v${{ steps.version.outputs.VERSION }}"
           echo "======================================"
 
-      - name: Trigger ArgoCD Webhook
+      - name: Update Deployment Repo
         if: success()
         run: |
           echo "======================================"
-          echo "Triggering ArgoCD webhook for immediate sync..."
+          echo "Updating deployment repository with version: ${{ steps.version.outputs.VERSION }}"
           echo "======================================"
 
-          # Send GitHub-compatible push event to ArgoCD webhook
-          curl -X POST \
-            -H "Content-Type: application/json" \
-            -H "X-GitHub-Event: push" \
-            "${{ secrets.ARGOCD_WEBHOOK_URL }}" \
-            -d '{
-              "ref": "refs/heads/${{ github.ref_name }}",
-              "repository": {
-                "full_name": "${{ github.repository }}",
-                "clone_url": "https://github.com/${{ github.repository }}.git",
-                "html_url": "https://github.com/${{ github.repository }}"
-              },
-              "after": "${{ github.sha }}"
-            }' || echo "Webhook call failed (continuing anyway)"
+          # Clone deployment repo
+          git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ShinobiSlayer/actions-deployment.git /tmp/deployment
 
-          echo "Webhook triggered!"
+          cd /tmp/deployment
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Update dev environment with new version
+          sed -i "s/newTag: .*/newTag: ${{ steps.version.outputs.VERSION }}/" environments/dev/kustomization.yaml
+
+          # Commit and push
+          git add environments/dev/kustomization.yaml
+          git commit -m "Deploy version ${{ steps.version.outputs.VERSION }} to dev [automated]"
+          git push origin main
+
+          echo "======================================"
+          echo "Deployment repo updated successfully!"
+          echo "======================================"
 
       - name: Summary
         if: success()
         run: |
           echo "======================================"
-          echo "✅ Build Complete!"
+          echo "✅ Build and Deployment Complete!"
           echo "======================================"
           echo "Version: ${{ steps.version.outputs.VERSION }}"
           echo "Git Tag: v${{ steps.version.outputs.VERSION }}"
           echo "Docker Image: shinobislayer/actions:${{ steps.version.outputs.VERSION }}"
           echo ""
-          echo "ArgoCD webhook triggered for immediate refresh."
-          echo "Image Updater will detect new image and update deployment."
+          echo "Deployment repo updated: environments/dev/kustomization.yaml"
+          echo "ArgoCD will sync the change automatically."
+          echo ""
+          echo "Monitor at: https://argocd.example.com"
           echo "======================================"
+
