@@ -3,8 +3,9 @@ plugins {
 }
 
 repositories {
-    mavenCentral()
     gradlePluginPortal()
+    mavenCentral()
+    google()
 }
 
 dependencies {
