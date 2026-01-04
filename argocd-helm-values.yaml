@@ -1,0 +1,14 @@
+server:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - argocd.example.com
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+
+configs:
+  params:
+    # Allow ArgoCD to manage applications in multiple namespaces
+    application.namespaces: "argocd,actions-dev,actions-staging"
